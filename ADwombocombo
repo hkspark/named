@@ -1,0 +1,642 @@
+#Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+    AD/DNS Server Hardening Script for Attack/Defend Competitions
+    
+.DESCRIPTION
+    Interactively hardens an Active Directory / DNS Windows Server for use in
+    blue-team competition scenarios. Covers:
+      - Admin & privileged account password rotation
+      - Account enumeration & selective disabling
+      - Login auditing & enhanced event logging
+      - Unnecessary service enumeration & disabling
+
+.NOTES
+    Run as Domain Admin on the DC/DNS server.
+    All actions are logged to $env:USERPROFILE\BlueTeam\hardening_log.txt
+    Create a list of accounts to KEEP in $SafeAccounts below before running.
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  CONFIGURATION  –  Edit these before running
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Accounts that should NEVER be disabled (blue team + scoring engine accounts)
+# Add your scoring/inject service accounts here.
+$SafeAccounts = @(
+    "Administrator",       # Keep at least one – you will rotate its password
+    "krbtgt",              # Required by Kerberos
+    "SYSTEM",
+    "Guest"                # Will be disabled separately if currently enabled
+    # Add scoring engine / inject service accounts here before running
+)
+
+# Services genuinely required for DC/DNS function – everything else gets prompted.
+# Intentionally excludes: WinRM, Spooler, RDP stack, Themes, SysMain, TrkWks,
+# WinHttpAutoProxySvc, wuauserv, WerSvc – those are operator decisions, not freebies.
+$RequiredServices = @(
+    "ADWS",               # Active Directory Web Services
+    "CryptSvc",           # Cryptographic Services – cert chain validation
+    "DcomLaunch",         # DCOM process launcher – RPC foundation
+    "DNS",                # DNS Server role
+    "EventLog",           # Windows Event Log – cannot audit without it
+    "gpsvc",              # Group Policy – core DC function
+    "kdc",                # Kerberos Key Distribution Center
+    "LanmanServer",       # SMB server – SYSVOL/NETLOGON shares
+    "LanmanWorkstation",  # SMB client – needed for DC replication
+    "MpsSvc",             # Windows Firewall
+    "Netlogon",           # Domain authentication / DC locator
+    "NTDS",               # AD Domain Services core
+    "NtFrs",              # File Replication (SYSVOL, legacy)
+    "PlugPlay",           # Hardware/driver baseline
+    "RpcEptMapper",       # RPC Endpoint Mapper
+    "RpcSs",              # Remote Procedure Call
+    "SamSs",              # Security Account Manager
+    "Schedule",           # Task Scheduler – GPO processing, replication
+    "SENS",               # System Event Notification – needed by many core svc
+    "SystemEventsBroker", # Coordinates WinRT/background tasks for core OS
+    "TimeBrokerSvc",      # Time broker (feeds W32Time)
+    "W32Time",            # Windows Time – Kerberos requires clock sync
+    "WinDefend"           # Windows Defender – keep unless you have an AV replacement
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  LOGGING SETUP
+# ─────────────────────────────────────────────────────────────────────────────
+
+$LogDir  = "$env:USERPROFILE\BlueTeam"
+$LogFile = "$LogDir\hardening_log.txt"
+
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
+
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[$ts][$Level] $Message"
+    Add-Content -Path $LogFile -Value $line
+    switch ($Level) {
+        "INFO"    { Write-Host $line -ForegroundColor Cyan }
+        "SUCCESS" { Write-Host $line -ForegroundColor Green }
+        "WARN"    { Write-Host $line -ForegroundColor Yellow }
+        "ERROR"   { Write-Host $line -ForegroundColor Red }
+        default   { Write-Host $line }
+    }
+}
+
+function Write-Banner {
+    param([string]$Title)
+    $line = "=" * 70
+    Write-Host "`n$line" -ForegroundColor Magenta
+    Write-Host "  $Title" -ForegroundColor Magenta
+    Write-Host "$line`n" -ForegroundColor Magenta
+    Write-Log "=== $Title ==="
+}
+
+function Prompt-YesNo {
+    param([string]$Question)
+    do {
+        $ans = Read-Host "$Question [Y/N]"
+    } while ($ans -notmatch '^[YyNn]$')
+    return ($ans -match '^[Yy]$')
+}
+
+Write-Banner "AD/DNS COMPETITION HARDENING SCRIPT"
+Write-Log "Script started by: $env:USERNAME on $env:COMPUTERNAME"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 1 – PASSWORD ROTATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 1: Password Rotation"
+
+function New-StrongPassword {
+    # Generates a 24-character random password meeting complexity requirements
+    $upper   = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZ'
+    $lower   = [char[]]'abcdefghjkmnpqrstuvwxyz'
+    $digits  = [char[]]'23456789'
+    $special = [char[]]'!@#$%^&*()-_=+[]'
+    $all     = $upper + $lower + $digits + $special
+    $rng     = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes   = New-Object byte[] 32
+
+    # Guarantee at least one of each class
+    $pwd = @(
+        $upper[$bytes[0] % $upper.Count],
+        $upper[$bytes[1] % $upper.Count],
+        $lower[$bytes[2] % $lower.Count],
+        $lower[$bytes[3] % $lower.Count],
+        $digits[$bytes[4] % $digits.Count],
+        $digits[$bytes[5] % $digits.Count],
+        $special[$bytes[6] % $special.Count],
+        $special[$bytes[7] % $special.Count]
+    )
+    $rng.GetBytes($bytes)
+    for ($i = $pwd.Count; $i -lt 24; $i++) {
+        $rng.GetBytes($bytes)
+        $pwd += $all[$bytes[0] % $all.Count]
+    }
+    # Fisher-Yates shuffle
+    $rng.GetBytes($bytes)
+    for ($i = $pwd.Count - 1; $i -gt 0; $i--) {
+        $j = $bytes[$i % $bytes.Count] % ($i + 1)
+        $tmp = $pwd[$i]; $pwd[$i] = $pwd[$j]; $pwd[$j] = $tmp
+    }
+    return ($pwd -join '')
+}
+
+# Enumerate privileged accounts
+$PrivGroups = @("Domain Admins","Administrators","Schema Admins",
+                "Enterprise Admins","Group Policy Creator Owners","Account Operators")
+
+$PrivAccounts = @()
+foreach ($grp in $PrivGroups) {
+    try {
+        $members = Get-ADGroupMember -Identity $grp -Recursive -ErrorAction SilentlyContinue |
+                   Where-Object { $_.objectClass -eq 'user' }
+        $PrivAccounts += $members
+    } catch {}
+}
+
+$PrivAccounts = $PrivAccounts | Select-Object -ExpandProperty SamAccountName -Unique |
+                Sort-Object
+
+Write-Log "Privileged accounts found: $($PrivAccounts -join ', ')"
+Write-Host "`nPrivileged accounts discovered across admin groups:" -ForegroundColor Yellow
+$PrivAccounts | ForEach-Object { Write-Host "  - $_" }
+
+$RotateAll = Prompt-YesNo "`nRotate passwords for ALL privileged accounts automatically?"
+
+# Determine if a PS transcript is currently running so we can suppress it
+# around password display and resume it cleanly afterward
+function Stop-TranscriptSafe {
+    try { Stop-Transcript | Out-Null; return $true } catch { return $false }
+}
+function Start-TranscriptSafe {
+    param([string]$Path)
+    try { Start-Transcript -Append -Path $Path | Out-Null } catch {}
+}
+
+$TranscriptPath = "$LogDir\PSTranscripts\transcript_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+
+Write-Host "`n[!] Passwords will be displayed ONCE on screen and never written to disk." -ForegroundColor Yellow
+Write-Host "    Record each password before pressing ENTER to continue.`n" -ForegroundColor Yellow
+
+foreach ($acct in $PrivAccounts) {
+    $doRotate = $false
+    if ($RotateAll) {
+        $doRotate = $true
+    } else {
+        $doRotate = Prompt-YesNo "Rotate password for '$acct'?"
+    }
+
+    if ($doRotate) {
+        try {
+            $newPwd = New-StrongPassword
+            $securePwd = ConvertTo-SecureString $newPwd -AsPlainText -Force
+
+            # Suspend transcript so the password never hits the log
+            $wasTranscribing = Stop-TranscriptSafe
+
+            Write-Host "`n  ┌──────────────────────────────────────────────────┐" -ForegroundColor Yellow
+            Write-Host "  │  ACCOUNT  : $acct" -ForegroundColor Yellow
+            Write-Host "  │  PASSWORD : $newPwd" -ForegroundColor Green
+            Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
+            Write-Host "  Record this now — it will not be shown again or written to disk." -ForegroundColor Red
+            Read-Host "  Press ENTER when recorded"
+
+            # Clear plaintext from memory before resuming transcript
+            $newPwd = $null
+            [System.GC]::Collect()
+
+            if ($wasTranscribing) { Start-TranscriptSafe $TranscriptPath }
+
+            # Apply the password change
+            Set-ADAccountPassword -Identity $acct -NewPassword $securePwd -Reset
+            Set-ADUser -Identity $acct -ChangePasswordAtLogon $false
+            $securePwd.Dispose()
+
+            Write-Log "Password rotated for: $acct" "SUCCESS"
+        } catch {
+            if ($wasTranscribing) { Start-TranscriptSafe $TranscriptPath }
+            Write-Log "FAILED to rotate password for $acct – $_" "ERROR"
+        }
+    }
+}
+
+Write-Log "Password rotation complete. No passwords were written to disk."
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 2 – ACCOUNT ENUMERATION & DISABLING
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 2: Account Enumeration & Disabling"
+
+$AllUsers = Get-ADUser -Filter * -Properties Enabled, LastLogonDate, Description, MemberOf |
+            Sort-Object SamAccountName
+
+Write-Host "`nAll AD accounts ($(($AllUsers).Count) total):`n"
+$AllUsers | Format-Table SamAccountName, Enabled, LastLogonDate, Description -AutoSize
+
+$DisableList = @()
+
+foreach ($user in $AllUsers) {
+    $sam = $user.SamAccountName
+
+    # Skip built-in protected accounts
+    if ($SafeAccounts -contains $sam) {
+        Write-Host "  [SAFE] $sam – skipping" -ForegroundColor DarkGray
+        continue
+    }
+    # Skip computer accounts
+    if ($sam.EndsWith('$')) {
+        Write-Host "  [SKIP] $sam – computer account" -ForegroundColor DarkGray
+        continue
+    }
+    # Skip already-disabled accounts silently
+    if (-not $user.Enabled) {
+        Write-Host "  [ALREADY DISABLED] $sam" -ForegroundColor DarkGray
+        continue
+    }
+
+    Write-Host "`n  Account  : $sam" -ForegroundColor White
+    Write-Host "  Enabled  : $($user.Enabled)"
+    Write-Host "  Last Logon: $($user.LastLogonDate)"
+    Write-Host "  Desc     : $($user.Description)"
+
+    if (Prompt-YesNo "  >> Disable '$sam'?") {
+        $DisableList += $sam
+    }
+}
+
+if ($DisableList.Count -gt 0) {
+    Write-Host "`nAccounts queued for disabling:" -ForegroundColor Yellow
+    $DisableList | ForEach-Object { Write-Host "  - $_" }
+
+    if (Prompt-YesNo "Confirm – disable all $($DisableList.Count) listed accounts?") {
+        foreach ($sam in $DisableList) {
+            try {
+                Disable-ADAccount -Identity $sam
+                Write-Log "Disabled account: $sam" "SUCCESS"
+            } catch {
+                Write-Log "Failed to disable $sam – $_" "ERROR"
+            }
+        }
+    }
+} else {
+    Write-Log "No accounts selected for disabling."
+}
+
+# Disable Guest explicitly if enabled
+try {
+    $guest = Get-ADUser -Identity "Guest" -Properties Enabled
+    if ($guest.Enabled) {
+        Disable-ADAccount -Identity "Guest"
+        Write-Log "Guest account disabled." "SUCCESS"
+    }
+} catch {}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 3 – FIREWALL CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 3: Firewall Configuration"
+
+if (Prompt-YesNo "Enable and configure Windows Firewall for all profiles?") {
+
+    # Enable firewall on all profiles
+    Write-Log "Enabling Windows Firewall on all profiles..."
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+    netsh advfirewall set allprofiles state on | Out-Null
+    Write-Log "Firewall enabled on Domain, Public, Private profiles." "SUCCESS"
+
+    # Harden the Public profile — block all unsolicited inbound
+    Write-Log "Hardening Public profile: block inbound, allow outbound..."
+    Set-NetFirewallProfile -Profile Public `
+        -DefaultInboundAction Block `
+        -DefaultOutboundAction Allow `
+        -AllowInboundRules False
+    Write-Log "Public profile hardened." "SUCCESS"
+
+    # Domain profile — block inbound by default, rely on explicit allow rules below
+    Write-Log "Setting Domain profile: block inbound by default..."
+    Set-NetFirewallProfile -Profile Domain `
+        -DefaultInboundAction Block `
+        -DefaultOutboundAction Allow
+    Write-Log "Domain profile inbound default set to Block." "SUCCESS"
+
+    # ── Core DC/DNS inbound rules ─────────────────────────────────────────────
+    Write-Log "Creating core DC/DNS inbound allow rules..."
+
+    $CoreRules = @(
+        @{ Name = "Allow LDAP";               Port = 389;  Protocol = "TCP" },
+        @{ Name = "Allow LDAP UDP";           Port = 389;  Protocol = "UDP" },
+        @{ Name = "Allow Secure LDAP";        Port = 636;  Protocol = "TCP" },
+        @{ Name = "Allow Kerberos TCP";       Port = 88;   Protocol = "TCP" },
+        @{ Name = "Allow Kerberos UDP";       Port = 88;   Protocol = "UDP" },
+        @{ Name = "Allow DNS TCP";            Port = 53;   Protocol = "TCP" },
+        @{ Name = "Allow DNS UDP";            Port = 53;   Protocol = "UDP" },
+        @{ Name = "Allow SMB";                Port = 445;  Protocol = "TCP" },
+        @{ Name = "Allow RPC Endpoint Mapper";Port = 135;  Protocol = "TCP" },
+        @{ Name = "Allow Global Catalog";     Port = 3268; Protocol = "TCP" },
+        @{ Name = "Allow Global Catalog SSL"; Port = 3269; Protocol = "TCP" },
+        @{ Name = "Allow NTP";                Port = 123;  Protocol = "UDP" },
+        @{ Name = "Allow Netlogon";           Port = 138;  Protocol = "UDP" }
+    )
+
+    foreach ($rule in $CoreRules) {
+        try {
+            # Remove any existing rule with the same name to avoid duplicates
+            Remove-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue
+            New-NetFirewallRule -DisplayName $rule.Name `
+                -Direction Inbound `
+                -Protocol $rule.Protocol `
+                -LocalPort $rule.Port `
+                -Action Allow `
+                -Profile Domain,Private | Out-Null
+            Write-Log "Rule created: $($rule.Name) ($($rule.Protocol)/$($rule.Port))" "SUCCESS"
+        } catch {
+            Write-Log "Failed to create rule '$($rule.Name)' – $_" "ERROR"
+        }
+    }
+
+    # ── RDP – prompt since blue team may need it ──────────────────────────────
+    if (Prompt-YesNo "Allow RDP (port 3389) inbound? (choose No to block it)") {
+        try {
+            Remove-NetFirewallRule -DisplayName "Allow RDP" -ErrorAction SilentlyContinue
+            New-NetFirewallRule -DisplayName "Allow RDP" `
+                -Direction Inbound -Protocol TCP -LocalPort 3389 `
+                -Action Allow -Profile Domain,Private | Out-Null
+            Write-Log "RDP inbound allowed on Domain/Private profiles." "SUCCESS"
+        } catch {
+            Write-Log "Failed to create RDP allow rule – $_" "ERROR"
+        }
+    } else {
+        try {
+            Remove-NetFirewallRule -DisplayName "Block RDP Inbound" -ErrorAction SilentlyContinue
+            New-NetFirewallRule -DisplayName "Block RDP Inbound" `
+                -Direction Inbound -Protocol TCP -LocalPort 3389 `
+                -Action Block | Out-Null
+            Write-Log "RDP inbound blocked." "SUCCESS"
+        } catch {
+            Write-Log "Failed to create RDP block rule – $_" "ERROR"
+        }
+    }
+
+    # ── WinRM – prompt since blue team may need it ────────────────────────────
+    if (Prompt-YesNo "Allow WinRM (port 5985/5986) inbound? (choose No to block it)") {
+        try {
+            foreach ($port in @(5985, 5986)) {
+                Remove-NetFirewallRule -DisplayName "Allow WinRM $port" -ErrorAction SilentlyContinue
+                New-NetFirewallRule -DisplayName "Allow WinRM $port" `
+                    -Direction Inbound -Protocol TCP -LocalPort $port `
+                    -Action Allow -Profile Domain,Private | Out-Null
+            }
+            Write-Log "WinRM inbound allowed on Domain/Private profiles." "SUCCESS"
+        } catch {
+            Write-Log "Failed to create WinRM allow rules – $_" "ERROR"
+        }
+    } else {
+        try {
+            foreach ($port in @(5985, 5986)) {
+                Remove-NetFirewallRule -DisplayName "Block WinRM $port" -ErrorAction SilentlyContinue
+                New-NetFirewallRule -DisplayName "Block WinRM $port" `
+                    -Direction Inbound -Protocol TCP -LocalPort $port `
+                    -Action Block | Out-Null
+            }
+            Write-Log "WinRM inbound blocked." "SUCCESS"
+        } catch {
+            Write-Log "Failed to create WinRM block rules – $_" "ERROR"
+        }
+    }
+
+    Write-Log "Firewall configuration complete." "SUCCESS"
+
+} else {
+    Write-Log "Firewall configuration section skipped by operator."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 4 – AUDITING & ENHANCED LOGGING
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 4: Login Auditing & Enhanced Logging"
+
+if (Prompt-YesNo "Enable comprehensive audit policies and enhanced logging?") {
+
+    Write-Log "Applying Advanced Audit Policies..."
+
+    $AuditPolicies = @{
+        "Account Logon"                   = @("Credential Validation","Kerberos Authentication Service","Kerberos Service Ticket Operations")
+        "Account Management"              = @("Computer Account Management","Distribution Group Management","Other Account Management Events","Security Group Management","User Account Management")
+        "Detailed Tracking"               = @("DPAPI Activity","Process Creation","Process Termination","RPC Events")
+        "DS Access"                       = @("Directory Service Access","Directory Service Changes","Directory Service Replication")
+        "Logon/Logoff"                    = @("Account Lockout","Logoff","Logon","Other Logon/Logoff Events","Special Logon")
+        "Object Access"                   = @("File Share","Kernel Object","Other Object Access Events","Registry","SAM","File System")
+        "Policy Change"                   = @("Audit Policy Change","Authentication Policy Change","Authorization Policy Change","MPSSVC Rule-Level Policy Change","Other Policy Change Events")
+        "Privilege Use"                   = @("Non Sensitive Privilege Use","Other Privilege Use Events","Sensitive Privilege Use")
+        "System"                          = @("IPsec Driver","Other System Events","Security State Change","Security System Extension","System Integrity")
+    }
+
+    foreach ($category in $AuditPolicies.Keys) {
+        foreach ($sub in $AuditPolicies[$category]) {
+            $result = & auditpol /set /subcategory:"$sub" /success:enable /failure:enable 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Audit enabled – [$category] $sub" "SUCCESS"
+            } else {
+                Write-Log "Audit WARN – [$category] $sub : $result" "WARN"
+            }
+        }
+    }
+
+    # Expand Security event log size
+    Write-Log "Expanding Security event log to 512 MB..."
+    & wevtutil sl Security /ms:536870912
+    & wevtutil sl System /ms:268435456
+    & wevtutil sl Application /ms:268435456
+
+    # Enable PowerShell Script Block Logging
+    Write-Log "Enabling PowerShell Script Block + Module Logging..."
+    $PSLogPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging"
+    $PSModPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging"
+    $PSTxPath  = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription"
+
+    foreach ($path in @($PSLogPath, $PSModPath, $PSTxPath)) {
+        if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+    }
+    Set-ItemProperty -Path $PSLogPath -Name "EnableScriptBlockLogging" -Value 1 -Type DWord
+    Set-ItemProperty -Path $PSLogPath -Name "EnableScriptBlockInvocationLogging" -Value 1 -Type DWord
+    Set-ItemProperty -Path $PSModPath -Name "EnableModuleLogging" -Value 1 -Type DWord
+    Set-ItemProperty -Path "$PSModPath\ModuleNames" -Name "*" -Value "*" -Type String -ErrorAction SilentlyContinue
+    if (-not (Test-Path "$PSModPath\ModuleNames")) {
+        New-Item -Path "$PSModPath\ModuleNames" -Force | Out-Null
+        Set-ItemProperty -Path "$PSModPath\ModuleNames" -Name "*" -Value "*" -Type String
+    }
+    # Transcription to $LogDir\PSTranscripts
+    $txDir = "$LogDir\PSTranscripts"
+    if (-not (Test-Path $txDir)) { New-Item -ItemType Directory $txDir | Out-Null }
+    Set-ItemProperty -Path $PSTxPath -Name "EnableTranscripting" -Value 1 -Type DWord
+    Set-ItemProperty -Path $PSTxPath -Name "OutputDirectory" -Value $txDir -Type String
+    Set-ItemProperty -Path $PSTxPath -Name "EnableInvocationHeader" -Value 1 -Type DWord
+
+    # Enable command-line auditing in process creation events (4688)
+    $ProcAuditPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit"
+    if (-not (Test-Path $ProcAuditPath)) { New-Item -Path $ProcAuditPath -Force | Out-Null }
+    Set-ItemProperty -Path $ProcAuditPath -Name "ProcessCreationIncludeCmdLine_Enabled" -Value 1 -Type DWord
+
+    # DNS Analytical/Debug logging (Windows DNS Server)
+    try {
+        Set-DnsServerDiagnostics -All $true -ErrorAction SilentlyContinue
+        Write-Log "DNS diagnostics/debug logging enabled." "SUCCESS"
+    } catch {
+        Write-Log "DNS diagnostic logging not applied (may not be a DNS server role): $_" "WARN"
+    }
+
+    # Enable Windows Firewall logging
+    Write-Log "Enabling Windows Firewall logging (dropped packets & connections)..."
+    Set-NetFirewallProfile -Profile Domain,Private,Public `
+        -LogBlocked True -LogAllowed True `
+        -LogFileName "$LogDir\firewall_log.txt" `
+        -LogMaxSizeKilobytes 32767
+
+    Write-Log "Auditing & enhanced logging configured." "SUCCESS"
+} else {
+    Write-Log "Auditing section skipped by operator."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 5 – SERVICE ENUMERATION & HARDENING
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 5: Service Enumeration & Disabling"
+
+$CandidateServices = Get-Service |
+    Where-Object { $_.StartType -ne 'Disabled' -and $RequiredServices -notcontains $_.Name } |
+    Sort-Object DisplayName
+
+Write-Host "`nServices eligible for review: $($CandidateServices.Count)" -ForegroundColor Yellow
+Write-Host "(Required DC/DNS services are pre-filtered and will not appear)`n"
+
+# Print numbered table — running services in red, stopped in gray
+$i = 0
+foreach ($svc in $CandidateServices) {
+    $i++
+    $color = if ($svc.Status -eq 'Running') { 'Red' } else { 'DarkGray' }
+    Write-Host ("{0,4}. {1,-48} {2,-12} {3}" -f $i, $svc.DisplayName, $svc.Status, $svc.StartType) -ForegroundColor $color
+}
+
+Write-Host "`nRunning services highlighted in red. Stopped/non-disabled in gray." -ForegroundColor Yellow
+Write-Host "Enter the numbers of services to stop & disable, comma-separated (e.g. 1,4,7,12)" -ForegroundColor Cyan
+Write-Host "Press ENTER with no input to skip this section.`n" -ForegroundColor Cyan
+
+$raw = Read-Host "Services to disable"
+
+$StopList = @()
+
+if ($raw.Trim() -ne '') {
+    $selections = $raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' }
+
+    foreach ($sel in $selections) {
+        $idx = [int]$sel - 1
+        if ($idx -ge 0 -and $idx -lt $CandidateServices.Count) {
+            $StopList += $CandidateServices[$idx]
+        } else {
+            Write-Log "Selection '$sel' out of range – skipped." "WARN"
+        }
+    }
+}
+
+if ($StopList.Count -gt 0) {
+    Write-Host "`nQueued for disabling:" -ForegroundColor Yellow
+    $StopList | ForEach-Object { Write-Host "  - $($_.Name)  ($($_.DisplayName))" }
+
+    if (Prompt-YesNo "`nConfirm – stop & disable these $($StopList.Count) services?") {
+        foreach ($svc in $StopList) {
+            try {
+                if ($svc.Status -eq 'Running') {
+                    Stop-Service -Name $svc.Name -Force -ErrorAction Stop
+                    Write-Log "Stopped service: $($svc.Name)" "SUCCESS"
+                }
+                Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction Stop
+                Write-Log "Disabled service: $($svc.Name)" "SUCCESS"
+            } catch {
+                Write-Log "Failed to stop/disable $($svc.Name) – $_" "ERROR"
+            }
+        }
+    }
+} else {
+    Write-Log "No services selected for disabling."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SECTION 6 – BONUS: ADDITIONAL QUICK WINS
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "SECTION 6: Bonus Quick Wins"
+
+if (Prompt-YesNo "Apply bonus hardening? (SMBv1 disable, NTLM restriction, LDAP signing, null sessions)") {
+
+    # Disable SMBv1
+    Write-Log "Disabling SMBv1..."
+    Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" `
+        -Name "SMB1" -Value 0 -Type DWord
+    Write-Log "SMBv1 disabled." "SUCCESS"
+
+    # Require NTLMv2, refuse LM & NTLMv1
+    Write-Log "Setting LAN Manager authentication to NTLMv2 only..."
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "LmCompatibilityLevel" -Value 5 -Type DWord
+    Write-Log "LmCompatibilityLevel set to 5 (NTLMv2 only)." "SUCCESS"
+
+    # Require LDAP server signing
+    Write-Log "Requiring LDAP server signing..."
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" `
+        -Name "LDAPServerIntegrity" -Value 2 -Type DWord
+    Write-Log "LDAP server signing required." "SUCCESS"
+
+    # Block anonymous/null session enumeration
+    Write-Log "Restricting anonymous/null sessions..."
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "RestrictAnonymous" -Value 1 -Type DWord
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "RestrictAnonymousSAM" -Value 1 -Type DWord
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" `
+        -Name "EveryoneIncludesAnonymous" -Value 0 -Type DWord
+    Write-Log "Anonymous/null session restrictions applied." "SUCCESS"
+
+    # Disable WDigest cleartext credential caching
+    Write-Log "Disabling WDigest (prevents cleartext creds in LSASS)..."
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest" `
+        -Name "UseLogonCredential" -Value 0 -Type DWord
+    Write-Log "WDigest disabled." "SUCCESS"
+
+    # Enable Protected Users security group awareness reminder
+    Write-Host "`n[TIP] Add admin accounts to the 'Protected Users' AD security group for" -ForegroundColor Cyan
+    Write-Host "      additional credential protections (no NTLM, DES, RC4, or unconstrained delegation)." -ForegroundColor Cyan
+
+    Write-Log "Bonus hardening complete." "SUCCESS"
+} else {
+    Write-Log "Bonus hardening section skipped."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  DONE
+# ─────────────────────────────────────────────────────────────────────────────
+
+Write-Banner "HARDENING COMPLETE"
+Write-Log "All sections complete. Review log at: $LogFile"
+
+Write-Host "`n  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "  ║  NEXT STEPS:                                                     ║" -ForegroundColor Green
+Write-Host "  ║  1. Verify scoring/inject accounts are still accessible          ║" -ForegroundColor Green
+Write-Host "  ║  2. Use Event Viewer → Security (filter 4624/4625/4648/4688)     ║" -ForegroundColor Green
+Write-Host "  ║  3. Add critical accounts to the 'Protected Users' AD group      ║" -ForegroundColor Green
+Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor Green
+Write-Host "  ║  LOG FILES:                                                      ║" -ForegroundColor Green
+Write-Host "  ║  Hardening  : $LogFile" -ForegroundColor Green
+Write-Host "  ║  Transcripts: $LogDir\PSTranscripts\" -ForegroundColor Green
+Write-Host "  ║  Firewall   : $LogDir\firewall_log.txt" -ForegroundColor Green
+Write-Host "  ╚══════════════════════════════════════════════════════════════════╝`n" -ForegroundColor Green
