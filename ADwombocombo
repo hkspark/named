@@ -28,7 +28,6 @@ $ErrorActionPreference = "Stop"
 # Add your scoring/inject service accounts here.
 $SafeAccounts = @(
     "Administrator",       # Keep at least one – you will rotate its password
-    "krbtgt",              # Required by Kerberos
     "SYSTEM",
     "Guest"                # Will be disabled separately if currently enabled
     # Add scoring engine / inject service accounts here before running
@@ -147,7 +146,75 @@ function New-StrongPassword {
     return ($pwd -join '')
 }
 
-# Enumerate privileged accounts
+# ── krbtgt: verify disabled state + double password rotation ─────────────────
+
+Write-Host "`n-- krbtgt Account --" -ForegroundColor Cyan
+
+try {
+    $krbtgt = Get-ADUser -Identity "krbtgt" -Properties Enabled, PasswordLastSet
+
+    if ($krbtgt.Enabled) {
+        Write-Log "WARNING: krbtgt account is ENABLED – this should never be the case. Investigate immediately." "WARN"
+        Write-Host "  [!!] krbtgt is enabled. Disabling now..." -ForegroundColor Red
+        Disable-ADAccount -Identity "krbtgt"
+        Write-Log "krbtgt forcibly disabled." "SUCCESS"
+    } else {
+        Write-Log "krbtgt is correctly disabled." "SUCCESS"
+        Write-Host "  [OK] krbtgt is disabled (correct)." -ForegroundColor Green
+    }
+
+    Write-Host "  Last password set: $($krbtgt.PasswordLastSet)" -ForegroundColor Yellow
+
+} catch {
+    Write-Log "Failed to query krbtgt account – $_" "ERROR"
+}
+
+if (Prompt-YesNo "Rotate krbtgt password? (Recommended – invalidates any forged Golden Tickets)") {
+
+    Write-Host "`n  [!] krbtgt requires TWO rotations due to AD password history caching." -ForegroundColor Yellow
+    Write-Host "      A 10-minute wait between rotations ensures replication across all DCs." -ForegroundColor Yellow
+    Write-Host "      You will be prompted between rounds.`n" -ForegroundColor Yellow
+
+    foreach ($round in 1..2) {
+        try {
+            $newPwd = New-StrongPassword
+            $securePwd = ConvertTo-SecureString $newPwd -AsPlainText -Force
+
+            $wasTranscribing = Stop-TranscriptSafe
+
+            Write-Host "`n  ┌──────────────────────────────────────────────────┐" -ForegroundColor Yellow
+            Write-Host "  │  krbtgt PASSWORD ROTATION – Round $round of 2          │" -ForegroundColor Yellow
+            Write-Host "  │  PASSWORD : $newPwd" -ForegroundColor Green
+            Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
+            Write-Host "  Record this now — it will not be shown again or written to disk." -ForegroundColor Red
+            Read-Host "  Press ENTER when recorded"
+
+            $newPwd = $null
+            [System.GC]::Collect()
+
+            if ($wasTranscribing) { Start-TranscriptSafe $TranscriptPath }
+
+            Set-ADAccountPassword -Identity "krbtgt" -NewPassword $securePwd -Reset
+            $securePwd.Dispose()
+
+            Write-Log "krbtgt password rotation round $round complete." "SUCCESS"
+
+            if ($round -eq 1) {
+                Write-Host "`n  Round 1 complete. You should wait ~10 minutes for AD replication" -ForegroundColor Yellow
+                Write-Host "  before performing round 2 to ensure the old hash is fully flushed." -ForegroundColor Yellow
+                Read-Host "  Press ENTER when ready for round 2"
+            }
+
+        } catch {
+            if ($wasTranscribing) { Start-TranscriptSafe $TranscriptPath }
+            Write-Log "Failed krbtgt rotation round $round – $_" "ERROR"
+        }
+    }
+
+    Write-Log "krbtgt double rotation complete." "SUCCESS"
+}
+
+# ── Privileged domain accounts ────────────────────────────────────────────────
 $PrivGroups = @("Domain Admins","Administrators","Schema Admins",
                 "Enterprise Admins","Group Policy Creator Owners","Account Operators")
 
@@ -248,6 +315,11 @@ foreach ($user in $AllUsers) {
     # Skip built-in protected accounts
     if ($SafeAccounts -contains $sam) {
         Write-Host "  [SAFE] $sam – skipping" -ForegroundColor DarkGray
+        continue
+    }
+    # krbtgt should already be disabled – verified and handled in Section 1
+    if ($sam -eq 'krbtgt') {
+        Write-Host "  [SKIP] krbtgt – handled in Section 1" -ForegroundColor DarkGray
         continue
     }
     # Skip computer accounts
