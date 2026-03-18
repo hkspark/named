@@ -20,6 +20,7 @@ iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 # Allow FTP ports
 iptables -A INPUT -p tcp --dport 21 -j ACCEPT
 iptables -A INPUT -p tcp --dport 20 -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
 # Allow passive FTP range
 iptables -A INPUT -p tcp --dport 40000:40100 -j ACCEPT
