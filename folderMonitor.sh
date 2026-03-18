@@ -1,4 +1,6 @@
 #!/bin/bash
+#Run ./folderMonitor.sh <directory>
+#Run first to get baseline, run again to look for changes, will give hash and name of added/modified
 
 # Folder to monitor
 DIR="$1"
