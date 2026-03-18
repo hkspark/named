@@ -1,4 +1,6 @@
 #!/bin/bash
+#Have to run with sudo
+#Gets rid of adduser cmd
 
 echo "Disabling user creation tools..."
 
