@@ -1,4 +1,5 @@
 #!/bin/bash
+#Works butall tested configs have the same flag (security monitoring active)
 
 # Blue team messages
 messages=(
