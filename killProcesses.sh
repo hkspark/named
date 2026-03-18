@@ -3,7 +3,7 @@
 echo "Scanning processes..."
 
 # Allowed processes
-allowed=("vsftpd" "ftp" "ftpd" "systemd" "init" "bash" "sshd")
+allowed=("vsftpd" "ftp" "ftpd" "systemd" "init" "bash" "sshd" "ssh" "dbus" "NetworkManager" "polkit" "qemu-guest-agent" )
 
 for pid in $(ps -eo pid=); do
     proc=$(ps -p $pid -o comm= 2>/dev/null)
