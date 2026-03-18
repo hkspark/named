@@ -1,4 +1,5 @@
 #!/bin/bash
+#Have to run as sudo
 
 echo "Applying firewall rules..."
 
