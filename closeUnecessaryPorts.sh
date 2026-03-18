@@ -4,26 +4,22 @@
 echo "Applying firewall rules..."
 
 # Flush existing rules
-iptables -F
-iptables -X
+ufw reset
 
 # Default deny policy
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT ACCEPT
+ufw default deny incoming
+ufw default deny outgoing
 
 # Allow localhost
-iptables -A INPUT -i lo -j ACCEPT
-
-# Allow established connections
-iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
+ufw allow from 127.0.0.1 to 127.0.0.1 port 80 proto tcp
 # Allow FTP ports
-iptables -A INPUT -p tcp --dport 21 -j ACCEPT
-iptables -A INPUT -p tcp --dport 20 -j ACCEPT
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+ufw allow 22/tcp
+ufw allow 20/tcp
+ufw allow 21/tcp
+ufw allow 443/tcp
 
-# Allow passive FTP range
-iptables -A INPUT -p tcp --dport 40000:40100 -j ACCEPT
+#Apply chagnes
+ufw reload
+
 
 echo "All non-FTP ports blocked."
