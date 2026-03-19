@@ -3,7 +3,7 @@ Port 22
 Protocol 2
 
 # Allow admin normal shell access
-Match User admin
+Match User cyberrange
     X11Forwarding yes
     AllowTcpForwarding yes
     PermitTTY yes
