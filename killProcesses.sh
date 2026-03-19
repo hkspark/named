@@ -62,6 +62,8 @@ for pid in $(ps -eo pid=); do
             systemctl disable "$service" 2>/dev/null
         fi
     fi
+    systemctl stop cups
+    systemctl disable cups
 done
 
 echo "Scan complete."
