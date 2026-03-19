@@ -52,7 +52,8 @@ for pid in $(ps -eo pid=); do
 
     if [ "$keep" = false ] && [ -n "$proc" ]; then
         echo "Killing $proc (PID $pid)"
-        # kill -9 "$pid" 2>/dev/null   # 🔴 COMMENTED FOR SAFETY
+        kill -9 "$pid" 2>/dev/null
+        systemctl disable "$pid"
     fi
 done
 
