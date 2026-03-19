@@ -53,7 +53,10 @@ for pid in $(ps -eo pid=); do
     if [ "$keep" = false ] && [ -n "$proc" ]; then
         echo "Killing $proc (PID $pid)"
         kill -9 "$pid" 2>/dev/null
-        systemctl disable "$pid"
+    fi
+    if systemctl list-units --type=service | grep -q "$proc"; then
+        sudo systemctl stop "$proc"
+        sudo systemctl disable "$proc"
     fi
 done
 
