@@ -44,7 +44,7 @@ copy_binary() {
 # Add allowed commands here
 ALLOWED_CMDS=(
 #Might have to change /bin/bash to /bin/rbash to ensure restriction/no escape
-    /bin/bash
+    /bin/rbash
     /bin/ls
     /bin/cat
     /bin/echo
