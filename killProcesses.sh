@@ -25,6 +25,13 @@ allowed=(
 "upowerd"
 "wazuh-agentd"
 "vsftpd"
+"scsi_eh_0"
+"systemd-journal"
+"systemd-timesyn"
+"dbus"
+"sddm"
+"ssh-agent"
+"sudo"
 )
 
 for pid in $(ps -eo pid=); do
@@ -49,4 +56,4 @@ for pid in $(ps -eo pid=); do
     fi
 done
 
-echo "Scan complete."#!/bin/bash
+echo "Scan complete."
