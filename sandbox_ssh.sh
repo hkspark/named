@@ -21,7 +21,7 @@ mkdir -p $BIN_DIR $LIB_DIR $LIB64_DIR $JAIL_DIR/files
 
 # Fix ownership (CRITICAL)
 chown root:root $JAIL_DIR
-chmod 755 $JAIL_DIR
+chmod 555 $JAIL_DIR
 
 # Create user-writable directory
 chown $USER_NAME:$USER_NAME $JAIL_DIR/files
