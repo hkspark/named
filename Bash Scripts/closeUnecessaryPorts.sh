@@ -1,5 +1,7 @@
 #!/bin/bash
 #Have to run as sudo
+#Closes all ports except 22 (SSH), 20(FTP), 21(FTP), 443 (HTTPS)
+#Can modify ports for different services
 
 echo "Applying firewall rules..."
 
