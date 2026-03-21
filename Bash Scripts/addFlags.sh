@@ -1,6 +1,6 @@
 #!/bin/bash
-
-#Works butall tested configs have the same flag (security monitoring active)
+#Adds flags to end of files ending with .conf, .config, .cfg, .yaml, .yml, .ini
+#Works but all tested configs have the same flag (security_monitoring_active)
 
 # Blue team messages
 messages=(
