@@ -1,4 +1,6 @@
 #!/bin/bash
+#Terminates all SSH sessions that aren't in the allowed IP list. 
+#Currently allows all grey team boxes and ubuntu workstation 1
 
 echo "Terminating SSH sessions (excluding trusted IPs)..."
 
