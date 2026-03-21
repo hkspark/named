@@ -1,4 +1,5 @@
 #!/bin/bash
+#Kills all processes that aren't needed for service to run. Can modify for different services(remove vsftpd and add service names)
 
 echo "Scanning processes..."
 
