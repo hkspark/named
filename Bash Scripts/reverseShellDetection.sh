@@ -1,4 +1,6 @@
 #!/bin/bash
+#returns all connections and ports
+#logs it in /var/log/reverse_shell_deection.log
 
 LOGFILE="/var/log/reverse_shell_detection.log"
 
