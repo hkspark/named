@@ -1,4 +1,5 @@
 #!/bin/bash
+#Stops all cron jobs that are running and changes permissions to cron files so they won't run again
 
 echo "Removing cron jobs..."
 
