@@ -1,5 +1,6 @@
 #!/bin/bash
 #Will output password to console, can change if need be
+#Changes all users passwords except cyberrange and greyteam to random string
 
 EXCLUDE="cyberrange | greyteam"
 
