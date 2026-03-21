@@ -1,5 +1,7 @@
 ```bash
 #!/bin/bash
+#Jails whatever user that runs it, doesnt stop user from making files or editing with vi
+#exit will exit the program and send back to directory it ran from
 
 # Usage: sudo ./setup_jail.sh username
 
