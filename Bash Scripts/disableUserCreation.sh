@@ -1,6 +1,6 @@
 #!/bin/bash
 #Have to run with sudo
-#Gets rid of adduser cmd
+#Gets rid of adduser cmd by changing permissions on file. Can reverse by chmod 755 /usr/sbin/useradd
 
 echo "Disabling user creation tools..."
 
