@@ -489,7 +489,7 @@ try {
             Write-Host "       - $($_.IdentityReference)" -ForegroundColor Red
             Write-Log "DCSync right holder: $($_.IdentityReference) (ObjectType: $($_.ObjectType))" "WARN"
         }
-        Write-Host "       Remove these manually via ADSI Edit or Set-Acl." -ForegroundColor Red
+        Write-Host "       Consider removing these manually via ADSI Edit or Set-Acl." -ForegroundColor Red
     } else {
         Write-Log "DCSync rights appear clean – no unexpected principals." "SUCCESS"
         Write-Host "  [OK] No unexpected DCSync rights found." -ForegroundColor Green
@@ -857,10 +857,6 @@ if (Prompt-YesNo "Apply additional hardening? (SMBv1, NTLMv2, LDAP signing, null
         Invoke-WmiMethod -Path "Win32_NetworkAdapterConfiguration.Index=$idx" -Name SetTcpipNetbios -ArgumentList 2 | Out-Null
     }
     Write-Log "NBT-NS disabled on all IP-enabled network adapters." "SUCCESS"
-
-    # Account lockout policy – prevents password spray and brute-force.
-    & net accounts /lockoutthreshold:5 /lockoutduration:30 /lockoutwindow:30 | Out-Null
-    Write-Log "Account lockout policy set: 5 failed attempts → 30-minute lockout." "SUCCESS"
 
     # DNS zone transfer restriction – prevents full zone enumeration via AXFR.
     Write-Log "Restricting DNS zone transfers to authoritative servers only..."
