@@ -64,6 +64,7 @@ $SafeAccounts = @(
     "GREYTEAM",             # Competition rule — off limits, do not touch
     "ANSIBLE",              # Competition rule — off limits, do not touch
     "SCORING",              # Competition rule — off limits, do not touch
+    "cyberrange",           # Grey Team using for scoring
     "WDAGUtilityAccount",   # Windows Defender App Guard — system managed
     "DefaultAccount"        # System managed account
     # Add authorized Amazonian usernames here once list is provided on Day 1
