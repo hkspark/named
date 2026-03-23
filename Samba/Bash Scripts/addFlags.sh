@@ -33,7 +33,7 @@ find / \
     -name "*.ini" \
   \) 2>/dev/null | while read file
 do
-
+do
 
     # Determine comment style
     case "$file" in
