@@ -1,0 +1,11 @@
+- name: Deploy CD T Blue Team bash scripts
+  hosts: linux
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: cdt_blue_team
+      vars:
+        # Where scripts will be installed on the target host
+        cdt_base_dir: "/opt/cdt-blue-team"
+

@@ -1,0 +1,49 @@
+---
+# List of repo-relative bash script files to deploy.
+# `src_rel` is relative to the repo root; `dest_rel` is relative to `cdt_base_dir` on the target.
+cdt_bash_script_files:
+  - src_rel: "monitoring/linux_monitor.sh"
+    dest_rel: "monitoring/linux_monitor.sh"
+
+  - src_rel: "sandbox_ssh.sh"
+    dest_rel: "sandbox/sandbox_ssh.sh"
+
+  - src_rel: "InjectAssistingScripts/ftp.sh"
+    dest_rel: "inject_assisting_scripts/ftp.sh"
+
+  - src_rel: "InjectAssistingScripts/lamp.sh"
+    dest_rel: "inject_assisting_scripts/lamp.sh"
+
+  - src_rel: "InjectAssistingScripts/wordpress.sh"
+    dest_rel: "inject_assisting_scripts/wordpress.sh"
+
+  - src_rel: "Bash Scripts/addFlags.sh"
+    dest_rel: "bash_scripts/addFlags.sh"
+
+  - src_rel: "Bash Scripts/reverseShellDetection.sh"
+    dest_rel: "bash_scripts/reverseShellDetection.sh"
+
+  - src_rel: "Bash Scripts/killSSH.sh"
+    dest_rel: "bash_scripts/killSSH.sh"
+
+  - src_rel: "Bash Scripts/folderMonitor.sh"
+    dest_rel: "bash_scripts/folderMonitor.sh"
+
+  - src_rel: "Bash Scripts/closeUnecessaryPorts.sh"
+    dest_rel: "bash_scripts/closeUnecessaryPorts.sh"
+
+  - src_rel: "Bash Scripts/changeUserPass.sh"
+    dest_rel: "bash_scripts/changeUserPass.sh"
+
+  - src_rel: "Bash Scripts/blockCron.sh"
+    dest_rel: "bash_scripts/blockCron.sh"
+
+  - src_rel: "Bash Scripts/disableUserCreation.sh"
+    dest_rel: "bash_scripts/disableUserCreation.sh"
+
+  - src_rel: "Bash Scripts/killProcesses.sh"
+    dest_rel: "bash_scripts/killProcesses.sh"
+
+  - src_rel: "FTP/TLSCert.sh"
+    dest_rel: "ftp/TLSCert.sh"
+

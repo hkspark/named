@@ -1,0 +1,11 @@
+[linux]
+lamp-samba ansible_host=10.10.10.105 ansible_user=cyberrange
+redis-nginx ansible_host=10.10.10.103 ansible_user=cyberrange
+redis-flask-nginx ansible_host=10.10.10.102 ansible_user=cyberrange
+wordpress ansible_host=10.10.10.104 ansible_user=cyberrange
+ftp ansible_host=10.10.10.101 ansible_user=cyberrange
+
+# Excluded on purpose:
+# - DeployBox (Ubuntu2404Desktop)
+# - UbuntuWorkstation (Ubuntu2404Desktop)
+

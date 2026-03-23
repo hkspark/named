@@ -23,7 +23,7 @@ echo "Using flag: $flag"
 
 # Find config files
 find / \
-  -path '/dbus/systemd/*' -prune -o \
+  -path '*/dbus-1/*' -prune -o \
   -type f \( \
     -name "*.conf" -o \
     -name "*.config" -o \

@@ -1,0 +1,8 @@
+---
+# Repo location on the Ansible control node (where you run `ansible-playbook`)
+cdt_repo_root: "{{ playbook_dir }}/.."
+
+# Ownership for installed scripts
+cdt_owner: "root"
+cdt_group: "root"
+

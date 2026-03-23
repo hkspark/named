@@ -1,0 +1,27 @@
+---
+- name: Ensure base install directory exists
+  ansible.builtin.file:
+    path: "{{ cdt_base_dir }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ cdt_owner }}"
+    group: "{{ cdt_group }}"
+
+- name: Ensure parent directories exist for script installs
+  ansible.builtin.file:
+    path: "{{ (cdt_base_dir ~ '/' ~ item.dest_rel) | dirname }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ cdt_owner }}"
+    group: "{{ cdt_group }}"
+  loop: "{{ cdt_bash_script_files }}"
+
+- name: Copy bash scripts to target (preserve content, set executable)
+  ansible.builtin.copy:
+    src: "{{ cdt_repo_root }}/{{ item.src_rel }}"
+    dest: "{{ cdt_base_dir }}/{{ item.dest_rel }}"
+    owner: "{{ cdt_owner }}"
+    group: "{{ cdt_group }}"
+    mode: "0755"
+  loop: "{{ cdt_bash_script_files }}"
+
