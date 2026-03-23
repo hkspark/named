@@ -1,0 +1,7 @@
+apport-autoreport.path              enabled
+cups.path                           enabled
+systemd-ask-password-console.path   static
+systemd-ask-password-plymouth.path  static
+systemd-ask-password-wall.path      static
+tpm-udev.path                       enabled
+whoopsie.path                       enabled
