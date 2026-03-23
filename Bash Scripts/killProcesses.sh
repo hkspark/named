@@ -33,6 +33,7 @@ allowed=(
 "sddm"
 "ssh-agent"
 "sudo"
+"systemd-resolvd"
 )
 
 for pid in $(ps -eo pid=); do
