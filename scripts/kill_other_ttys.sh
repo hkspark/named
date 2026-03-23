@@ -1,0 +1,1 @@
+kill -s 9 $(pgrep -vt $(tty | sed 's/\/dev\///'),?)
