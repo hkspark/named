@@ -1,4 +1,4 @@
-- name: Deploy CD T Blue Team bash scripts
+- name: Deploy CDT Blue Team bash scripts
   hosts: linux
   become: true
   gather_facts: true
