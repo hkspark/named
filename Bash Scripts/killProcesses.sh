@@ -33,6 +33,7 @@ allowed=(
 "sddm"
 "ssh-agent"
 "sudo"
+"NetworkManager"
 )
 
 for pid in $(ps -eo pid=); do
