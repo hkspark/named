@@ -1,0 +1,10 @@
+# /usr/lib/systemd/system/tpm-udev.path
+[Unit]
+ConditionVirtualization=container
+Description=Handle dynamically added tpm devices
+
+[Path]
+PathChanged=/dev
+
+[Install]
+WantedBy=paths.target
