@@ -35,6 +35,8 @@ $ErrorActionPreference = "Stop"
 $SafeAccounts = @(
     "Administrator",
     "SYSTEM"
+    "cyberrange"
+    "GREYTEAM"
     # Add scoring engine / inject service accounts here before running
 )
 
