@@ -1,0 +1,6 @@
+# /usr/lib/systemd/system/spice-vdagentd.socket
+[Unit]
+Description=Activation socket for spice guest agent daemon
+
+[Socket]
+ListenStream=/run/spice-vdagentd/spice-vdagent-sock
