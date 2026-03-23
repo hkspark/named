@@ -128,7 +128,7 @@ Write-Log "Script started by: $env:USERNAME on $env:COMPUTERNAME"
 Write-Banner "SECTION 1: Password Rotation"
 
 function New-StrongPassword {
-    # Generates a 24-character random password satisfying complexity requirements.
+    # Generates a 12-character random password satisfying complexity requirements.
     $upper   = [char[]]'ABCDEFGHJKLMNPQRSTUVWXYZ'
     $lower   = [char[]]'abcdefghjkmnpqrstuvwxyz'
     $digits  = [char[]]'23456789'
@@ -152,8 +152,8 @@ function New-StrongPassword {
         $special[$bytes[7] % $special.Count]
     )
 
-    # Fill remaining characters to reach length 24.
-    for ($i = $passChars.Count; $i -lt 24; $i++) {
+    # Fill remaining characters to reach length 12.
+    for ($i = $passChars.Count; $i -lt 12; $i++) {
         $rng.GetBytes($bytes)
         $passChars += $all[$bytes[0] % $all.Count]
     }
