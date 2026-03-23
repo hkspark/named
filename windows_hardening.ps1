@@ -390,51 +390,59 @@ foreach ($bin in $lolbins) {
 # ============================================================
 Section "Windows Defender / AV Hardening"
 
-# Enable all Defender features
-Set-MpPreference -DisableRealtimeMonitoring $false
-Set-MpPreference -DisableBehaviorMonitoring $false
-Set-MpPreference -DisableBlockAtFirstSeen $false
-Set-MpPreference -DisableIOAVProtection $false
-Set-MpPreference -DisablePrivacyMode $false
-Set-MpPreference -SignatureDisableUpdateOnStartupWithoutEngine $false
-Set-MpPreference -DisableArchiveScanning $false
-Set-MpPreference -DisableIntrusionPreventionSystem $false
-Log "Windows Defender real-time protections enabled" "Green"
+#Requires -RunAsAdministrator
 
-# Enable Attack Surface Reduction (ASR) rules
-# These block specific attack techniques used by malware and Red Team
+$defRegPath = "HKLM:\SOFTWARE\Microsoft\Windows Defender"
+$rtRegPath  = "HKLM:\SOFTWARE\Microsoft\Windows Defender\Real-Time Protection"
+$polRegPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+
+# --- Real-time protection ON ---
+New-Item -Path $rtRegPath -Force | Out-Null
+Set-ItemProperty -Path $rtRegPath -Name "DisableRealtimeMonitoring"    -Value 0 -Type DWord
+Set-ItemProperty -Path $rtRegPath -Name "DisableBehaviorMonitoring"     -Value 0 -Type DWord
+Set-ItemProperty -Path $rtRegPath -Name "DisableOnAccessProtection"     -Value 0 -Type DWord
+Set-ItemProperty -Path $rtRegPath -Name "DisableScanOnRealtimeEnable"   -Value 0 -Type DWord
+Log "Defender real-time protection enabled via registry" "Green"
+
+# --- Block at First Seen ---
+New-Item -Path "$defRegPath\Spynet" -Force | Out-Null
+Set-ItemProperty -Path "$defRegPath\Spynet" -Name "DisableBlockAtFirstSeen" -Value 0 -Type DWord
+
+# --- Network Protection ---
+New-Item -Path "$defRegPath\Windows Defender Exploit Guard\Network Protection" -Force | Out-Null
+Set-ItemProperty -Path "$defRegPath\Windows Defender Exploit Guard\Network Protection" `
+    -Name "EnableNetworkProtection" -Value 1 -Type DWord
+Log "Network Protection enabled via registry" "Green"
+
+# --- Controlled Folder Access ---
+New-Item -Path "$defRegPath\Windows Defender Exploit Guard\Controlled Folder Access" -Force | Out-Null
+Set-ItemProperty -Path "$defRegPath\Windows Defender Exploit Guard\Controlled Folder Access" `
+    -Name "EnableControlledFolderAccess" -Value 1 -Type DWord
+Log "Controlled Folder Access enabled via registry" "Green"
+
+# --- ASR Rules via Registry ---
+$asrRegPath = "$defRegPath\Windows Defender Exploit Guard\ASR\Rules"
+New-Item -Path $asrRegPath -Force | Out-Null
+
 $asrRules = @{
-    "BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550" = "Block executable content from email/webmail"
-    "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" = "Block Office apps from creating child processes"
-    "3B576869-A4EC-4529-8536-B80A7769E899" = "Block Office apps from creating executable content"
-    "75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84" = "Block Office apps from injecting into processes"
-    "D3E037E1-3EB8-44C8-A917-57927947596D" = "Block JS/VBS from launching downloaded executable"
-    "5BEB7EFE-FD9A-4556-801D-275E5FFC04CC" = "Block execution of potentially obfuscated scripts"
-    "92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B" = "Block Win32 API calls from Office macros"
-    "01443614-CD74-433A-B99E-2ECDC07BFC25" = "Block executable files unless they meet prevalence criteria"
-    "9E6C4E1F-7D60-472F-BA1A-A39EF669E4B2" = "Block credential stealing from LSASS"
-    "B2B3F03D-6A65-4F7B-A9C7-1C7EF74A9BA4" = "Block untrusted/unsigned USB processes"
-    "26190899-1602-49E8-8B27-EB1D0A1CE869" = "Block Office communication apps from creating child processes"
-    "7674BA52-37EB-4A4F-A9A1-F0F9A1619A2C" = "Block Adobe Reader from creating child processes"
+    "BE9BA2D9-53EA-4CDC-84E5-9B1EEEE46550" = 1  # Block executable content from email
+    "D4F940AB-401B-4EFC-AADC-AD5F3C50688A" = 1  # Block Office child processes
+    "3B576869-A4EC-4529-8536-B80A7769E899" = 1  # Block Office executable content
+    "75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84" = 1  # Block Office process injection
+    "D3E037E1-3EB8-44C8-A917-57927947596D" = 1  # Block JS/VBS launching executables
+    "5BEB7EFE-FD9A-4556-801D-275E5FFC04CC" = 1  # Block obfuscated scripts
+    "92E97FA1-2EDF-4476-BDD6-9DD0B4DDDC7B" = 1  # Block Win32 API calls from Office
+    "9E6C4E1F-7D60-472F-BA1A-A39EF669E4B2" = 1  # Block credential stealing from LSASS
+    "B2B3F03D-6A65-4F7B-A9C7-1C7EF74A9BA4" = 1  # Block untrusted USB processes
+    "26190899-1602-49E8-8B27-EB1D0A1CE869" = 1  # Block Office comms child processes
+    "7674BA52-37EB-4A4F-A9A1-F0F9A1619A2C" = 1  # Block Adobe Reader child processes
+    "01443614-CD74-433A-B99E-2ECDC07BFC25" = 1  # Block executables by prevalence
 }
 
 foreach ($rule in $asrRules.GetEnumerator()) {
-    Add-MpPreference -AttackSurfaceReductionRules_Ids $rule.Key `
-        -AttackSurfaceReductionRules_Actions Enabled
-    Log "ASR enabled: $($rule.Value)" "Green"
+    Set-ItemProperty -Path $asrRegPath -Name $rule.Key -Value $rule.Value -Type DWord
 }
-
-# Enable Network Protection (blocks malicious domains/IPs)
-Set-MpPreference -EnableNetworkProtection Enabled
-Log "Network Protection enabled" "Green"
-
-# Enable Controlled Folder Access (ransomware protection)
-Set-MpPreference -EnableControlledFolderAccess Enabled
-Log "Controlled Folder Access enabled" "Green"
-
-# Force signature update
-Update-MpSignature -ErrorAction SilentlyContinue
-Log "Defender signatures updated" "Green"
+Log "ASR rules written via registry" "Green"
 
 # ============================================================
 # SECTION 10 — MISCELLANEOUS HARDENING
