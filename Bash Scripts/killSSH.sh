@@ -8,7 +8,7 @@ echo "Terminating SSH sessions (excluding trusted IPs)..."
 
 # Add trusted IPs here
 #Allows all grey team and ubuntu workstation 1 (can modify if needed)
-allowed_ips=("10.10.10.5" "10.10.10.6" "10.10.10.7" "10.10.10.11" "10.10.10.10" "10.10.10.106" "10.10.10.25")
+allowed_ips=("10.10.10.5" "10.10.10.6" "10.10.10.7" "10.10.10.11" "10.10.10.10" "10.10.10.106" "10.10.10.101")
 
 # Keep the current SSH source IP automatically (if script is run via SSH).
 if [[ -n "${SSH_CONNECTION:-}" ]]; then
