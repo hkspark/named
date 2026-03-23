@@ -22,14 +22,17 @@ flag="flag{${rand_msg}}"
 echo "Using flag: $flag"
 
 # Find config files
-find / -type f \( \
--name "*.conf" -o \
--name "*.config" -o \
--name "*.cfg" -o \
--name "*.yaml" -o \
--name "*.yml" -o \
--name "*.ini" \
-\) 2>/dev/null | while read file
+find / \
+  -path '/dbus/systemd/*' -prune -o \
+  -type f \( \
+    -name "*.conf" -o \
+    -name "*.config" -o \
+    -name "*.cfg" -o \
+    -name "*.yaml" -o \
+    -name "*.yml" -o \
+    -name "*.ini" \
+  \) 2>/dev/null | while read file
+do
 do
 
     # Determine comment style
