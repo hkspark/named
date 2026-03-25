@@ -25,6 +25,7 @@ ufw allow 20/tcp
 ufw allow 21/tcp
 
 #Apply chagnes
+ufw enable
 ufw reload
 
 
