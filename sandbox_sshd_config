@@ -1,34 +1,7 @@
-# Default settings
-Port 22
-Protocol 2
-
-# Allow admin normal shell access
-Match User cyberrange
-    X11Forwarding yes
-    AllowTcpForwarding yes
-    PermitTTY yes
-
-# Apply sandbox (restricted shell) to everyone else
-Match all
-    ForceCommand /usr/bin/rbash
-    ChrootDirectory /home/%u
+#Add to /etc/ssh/sshd_config
+Match User jbezos
+    ChrootDirectory /home/jbezos/
+    ForceCommand /bin/sh
     AllowTcpForwarding no
     X11Forwarding no
     PermitTTY yes
-
-
-#If rbash doesn't exist
-#ln -s /bin/bash /usr/bin/rbash
-
-#Change permissions so users can't escape (where Bob is user)
-#chown root:root /home/bob
-#chmod 755 /home/bob
-
-#Limit Bob's commands to ls cat echo (might need to copy dependencies)
-#mkdir -p /home/bob/bin
-#cp /bin/ls /home/bob/bin/
-#cp /bin/cat /home/bob/bin/
-#cp /bin/echo /home/bob/bin/
-
-#Edit /home/bob/.bash_profile to force commands to stay inside sandbox
-#export PATH=/bin
