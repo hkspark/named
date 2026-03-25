@@ -1,4 +1,5 @@
 #Add to /etc/ssh/sshd_config
+#Make sure /etc/passwd has /bin/sh as last file (shell to login)
 Match User jbezos
     ChrootDirectory /home/jbezos/
     ForceCommand /bin/sh
