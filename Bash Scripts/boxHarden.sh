@@ -7,13 +7,6 @@ echo "starting general hardening..."
 
 TIMESTAMP=$(date +%s)
 
-# 0. firewall ( DO NOT enable blindly)
-echo "checking firewall (non-intrusive)..."
-
-if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
-    ufw allow from 10.10.10.11 comment 'scoring-engine'
-    ufw allow from 10.10.10.10 comment 'wazuh-monitoring'
-fi
 
 # BACKUPS
 echo "creating backups..."
