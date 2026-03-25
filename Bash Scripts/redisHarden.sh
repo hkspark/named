@@ -35,7 +35,6 @@ grep -q "^protected-mode" "$REDIS_CONF" && \
     sed -i 's/^protected-mode .*/protected-mode yes/' "$REDIS_CONF" || \
     echo "protected-mode yes" >> "$REDIS_CONF"
 
-# ❌ DO NOT force bind (can break app/scoring)
 
 # 2. rename dangerous commands
 echo "renaming dangerous commands..."
