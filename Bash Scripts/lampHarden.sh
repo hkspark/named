@@ -5,6 +5,14 @@ set -euo pipefail
 
 echo "starting LAMP hardening..."
 
+# 0. firewall ( dont enable blindly )
+echo "checking firewall..."
+
+if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+    ufw allow from 10.10.10.11 comment 'scoring-engine'
+    ufw allow from 10.10.10.10 comment 'wazuh-monitoring'
+fi
+
 # 1. apache
 echo "hardening apache..."
 
@@ -20,7 +28,7 @@ cat <<EOF >> "$APACHE_CONF"
 EOF
 fi
 
-# hide version info
+# hide version info safely
 grep -q "^ServerTokens" "$SEC_CONF" && \
     sed -i 's/^ServerTokens.*/ServerTokens Prod/' "$SEC_CONF" || \
     echo "ServerTokens Prod" >> "$SEC_CONF"
@@ -40,6 +48,7 @@ cat <<EOF > "$SEC_FILE"
 <IfModule mod_headers.c>
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
 </IfModule>
 EOF
     a2enconf security-headers >/dev/null 2>&1 || true
@@ -57,17 +66,16 @@ echo "apache hardened."
 # 2. php
 echo "hardening php..."
 
-PHPINI=$(php -i 2>/dev/null | grep "Loaded Configuration" | awk '{print $5}')
-
-if [ -f "$PHPINI" ]; then
-    sed -i 's/^expose_php.*/expose_php = Off/' "$PHPINI" || true
-    sed -i 's/^display_errors.*/display_errors = Off/' "$PHPINI" || true
-
-    sed -i 's/^allow_url_include.*/allow_url_include = Off/' "$PHPINI" || true
-
-    sed -i 's/^session.cookie_httponly.*/session.cookie_httponly = 1/' "$PHPINI" || true
-    sed -i 's/^session.use_strict_mode.*/session.use_strict_mode = 1/' "$PHPINI" || true
-fi
+# find all php.ini files
+for PHPINI in $(find /etc/php -name "php.ini"); do
+    if [ -f "$PHPINI" ]; then
+        sed -i 's/^expose_php.*/expose_php = Off/' "$PHPINI" || true
+        sed -i 's/^display_errors.*/display_errors = Off/' "$PHPINI" || true
+        sed -i 's/^allow_url_include.*/allow_url_include = Off/' "$PHPINI" || true
+        sed -i 's/^session.cookie_httponly.*/session.cookie_httponly = 1/' "$PHPINI" || true
+        sed -i 's/^session.use_strict_mode.*/session.use_strict_mode = 1/' "$PHPINI" || true
+    fi
+done
 
 # reload apache for php changes
 if apache2ctl configtest >/dev/null 2>&1; then
