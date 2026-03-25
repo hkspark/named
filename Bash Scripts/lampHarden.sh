@@ -7,13 +7,6 @@ echo "starting LAMP hardening..."
 
 TIMESTAMP=$(date +%s)
 
-# 0. firewall ( dont enable blindly )
-echo "checking firewall..."
-
-if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
-    ufw allow from 10.10.10.11 comment 'scoring-engine'
-    ufw allow from 10.10.10.10 comment 'wazuh-monitoring'
-fi
 
 # 1. apache
 echo "hardening apache..."
