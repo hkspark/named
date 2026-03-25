@@ -1,9 +1,11 @@
 #!/bin/bash
-# competition-safe polished LAMP hardening script
+# LAMP hardening script (with backups)
 
 set -euo pipefail
 
 echo "starting LAMP hardening..."
+
+TIMESTAMP=$(date +%s)
 
 # 0. firewall ( dont enable blindly )
 echo "checking firewall..."
@@ -18,6 +20,16 @@ echo "hardening apache..."
 
 APACHE_CONF="/etc/apache2/apache2.conf"
 SEC_CONF="/etc/apache2/conf-available/security.conf"
+
+# BACKUPS
+APACHE_BACKUP="/tmp/apache2.conf.backup.$TIMESTAMP.txt"
+SEC_BACKUP="/tmp/security.conf.backup.$TIMESTAMP.txt"
+
+cp "$APACHE_CONF" "$APACHE_BACKUP"
+[ -f "$SEC_CONF" ] && cp "$SEC_CONF" "$SEC_BACKUP"
+
+echo "apache config backup: $APACHE_BACKUP"
+echo "security.conf backup: $SEC_BACKUP"
 
 # disable directory listing 
 if ! grep -q "<Directory /var/www/>" "$APACHE_CONF"; then
@@ -66,9 +78,12 @@ echo "apache hardened."
 # 2. php
 echo "hardening php..."
 
-# find all php.ini files
 for PHPINI in $(find /etc/php -name "php.ini"); do
     if [ -f "$PHPINI" ]; then
+        PHP_BACKUP="/tmp/$(basename $PHPINI).backup.$TIMESTAMP.txt"
+        cp "$PHPINI" "$PHP_BACKUP"
+        echo "php backup: $PHP_BACKUP"
+
         sed -i 's/^expose_php.*/expose_php = Off/' "$PHPINI" || true
         sed -i 's/^display_errors.*/display_errors = Off/' "$PHPINI" || true
         sed -i 's/^allow_url_include.*/allow_url_include = Off/' "$PHPINI" || true
@@ -88,6 +103,19 @@ echo "php hardened."
 
 # 3. mysql
 echo "hardening mysql..."
+
+MYSQL_BACKUP="/tmp/mysql_state.backup.$TIMESTAMP.txt"
+
+# simple snapshot (users + databases)
+{
+    echo "=== USERS ==="
+    mysql -e "SELECT User,Host FROM mysql.user;" 2>/dev/null || true
+    echo ""
+    echo "=== DATABASES ==="
+    mysql -e "SHOW DATABASES;" 2>/dev/null || true
+} > "$MYSQL_BACKUP"
+
+echo "mysql state backup: $MYSQL_BACKUP"
 
 # remove anonymous users
 mysql -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
