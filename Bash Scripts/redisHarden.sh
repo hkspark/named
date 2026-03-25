@@ -1,5 +1,5 @@
 #!/bin/bash
-# competition-safe redis hardening script
+# competition-safe redis hardening script (with config backup)
 
 set -euo pipefail
 
@@ -15,6 +15,14 @@ if [ -z "$REDIS_CONF" ]; then
     echo "redis.conf not found, exiting."
     exit 1
 fi
+
+# BACKUP CONFIG (timestamped .txt)
+echo "creating backup of redis config..."
+
+BACKUP_FILE="/tmp/redis.conf.backup.$(date +%s).txt"
+cp "$REDIS_CONF" "$BACKUP_FILE"
+
+echo "backup saved to: $BACKUP_FILE"
 
 # ask for redis password 
 read -sp "enter redis requirepass: " REDIS_PASS
@@ -34,7 +42,6 @@ fi
 grep -q "^protected-mode" "$REDIS_CONF" && \
     sed -i 's/^protected-mode .*/protected-mode yes/' "$REDIS_CONF" || \
     echo "protected-mode yes" >> "$REDIS_CONF"
-
 
 # 2. rename dangerous commands
 echo "renaming dangerous commands..."
