@@ -1,9 +1,11 @@
 #!/bin/bash
-# linux hardening script 
+# linux hardening script (with backups)
 
 set -euo pipefail
 
 echo "starting general hardening..."
+
+TIMESTAMP=$(date +%s)
 
 # 0. firewall ( DO NOT enable blindly)
 echo "checking firewall (non-intrusive)..."
@@ -12,6 +14,21 @@ if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
     ufw allow from 10.10.10.11 comment 'scoring-engine'
     ufw allow from 10.10.10.10 comment 'wazuh-monitoring'
 fi
+
+# BACKUPS
+echo "creating backups..."
+
+SSHD_BACKUP="/tmp/sshd_config.backup.$TIMESTAMP.txt"
+SUDO_BACKUP="/tmp/sudoers.backup.$TIMESTAMP.txt"
+SYSCTL_BACKUP="/tmp/sysctl.conf.backup.$TIMESTAMP.txt"
+
+[ -f /etc/ssh/sshd_config ] && cp /etc/ssh/sshd_config "$SSHD_BACKUP"
+[ -f /etc/sudoers ] && cp /etc/sudoers "$SUDO_BACKUP"
+[ -f /etc/sysctl.conf ] && cp /etc/sysctl.conf "$SYSCTL_BACKUP"
+
+echo "sshd backup: $SSHD_BACKUP"
+echo "sudoers backup: $SUDO_BACKUP"
+echo "sysctl backup: $SYSCTL_BACKUP"
 
 # 1. root password 
 echo "root password change (optional)..."
@@ -77,12 +94,11 @@ echo "fixing sensitive file permissions..."
 chmod 600 /etc/shadow || true
 chmod 600 /etc/gshadow || true
 
-# allow log readability (safe for scoring/monitoring)
 chmod 644 /var/log/syslog 2>/dev/null || true
 
 echo "permissions updated."
 
-# 5. sysctl (minimal + idempotent)
+# 5. sysctl 
 echo "applying minimal sysctl hardening..."
 
 SYSCTL="/etc/sysctl.conf"
@@ -97,7 +113,7 @@ sysctl -p >/dev/null 2>&1 || true
 
 echo "sysctl settings applied."
 
-# 6. updates (safe)
+# 6. updates 
 echo "running safe update..."
 
 apt-get update -q >/dev/null 2>&1 || true
