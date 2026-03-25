@@ -1,5 +1,5 @@
 #!/bin/bash
-# competition-safe redis hardening script (with config backup)
+# redis hardening script (with config backup)
 
 set -euo pipefail
 
