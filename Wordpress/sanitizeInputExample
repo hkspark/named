@@ -1,0 +1,7 @@
+if ( isset( $_POST['user_message'] ) ) {
+    // Sanitize the input
+    $safe_message = sanitize_textarea_field( wp_unslash( $_POST['user_message'] ) );
+
+    // Use the sanitized data (e.g., save to database)
+    update_option( 'my_plugin_message', $safe_message );
+}
