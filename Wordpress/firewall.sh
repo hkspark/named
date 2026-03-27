@@ -1,0 +1,33 @@
+#!/bin/bash
+#Have to run as sudo
+#Closes all ports except 22 (SSH), 20(FTP), 21(FTP), 443 (HTTPS)
+#Can modify ports for different services
+
+echo "Applying firewall rules..."
+
+# Flush existing rules
+ufw reset
+
+# Default deny policy
+ufw default deny incoming
+ufw default deny outgoing
+
+# Allow localhost and SSH
+ufw allow from 127.0.0.1 to 127.0.0.1 port 80 proto tcp
+ufw allow from 10.10.10.5 to any port 22
+ufw allow from 10.10.10.6 to any port 22
+ufw allow from 10.10.10.7 to any port 22
+ufw allow from 10.10.10.10 to any port 22
+ufw allow from 10.10.10.11 to any port 22
+ufw allow from 10.10.10.106 to any port 22
+ufw allow from 10.10.10.107 to any port 22
+# Allow Web pors
+ufw allow 80/tcp
+ufw allow 443/tcp
+
+#Apply chagnes
+ufw enable
+ufw reload
+
+
+echo "All non-FTP ports blocked."
