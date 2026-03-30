@@ -824,9 +824,9 @@ if (Prompt-YesNo "Apply additional hardening? (SMBv1, NTLMv2, LDAP signing, null
         -Name "LmCompatibilityLevel" -Value 5 -Type DWord
     Write-Log "LmCompatibilityLevel set to 5 (NTLMv2 only)." "SUCCESS"
 
-    # Require LDAP server signing.
+    # Request LDAP server signing *cannot guarantee GSSAPI will work for linux endpoints*.
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" `
-        -Name "LDAPServerIntegrity" -Value 2 -Type DWord
+        -Name "LDAPServerIntegrity" -Value 1 -Type DWord
     Write-Log "LDAP server signing required." "SUCCESS"
 
     # Block anonymous/null session enumeration.
